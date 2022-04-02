@@ -105,7 +105,7 @@ def analyze(data):
 #   return analyzed_data
 
 
-def parse_subs(path, globs, conn):
+def parse_subs(path, globs, conn) -> dict:
   """Finds video files and matched subtitles in 'path' and returns subtitle events
 
   A subtitle is considered matched to a video file if ones file name
@@ -136,8 +136,7 @@ def parse_subs(path, globs, conn):
     sub_files.extend(path.glob(ext))
   # remove sub_files from sub_files if it was found in conn database
   for sub in sub_files:
-    conn.execute('''SELECT * FROM events WHERE sub_path = ?''', (sub,))
-    if conn.fetchone():
+    if conn.execute('''SELECT * FROM events WHERE sub_path = ?''', (sub.as_posix(),)).fetchone():
       sub_files.remove(sub)
 
   vid_files = []
@@ -153,7 +152,7 @@ def parse_subs(path, globs, conn):
   vid_sub_match = ''
   for sub_file in sub_files:
     for vid_file in vid_files:
-      if sub_file.find(
+      if sub_file.as_posix().find(
               vid_file.name.split('.')[0]) != -1:
         logging.log(logging.INFO, f'Found subtitle {sub_file} for video {vid_file}')
         vid_sub_match = vid_file
@@ -164,7 +163,7 @@ def parse_subs(path, globs, conn):
     subtitle = subParser.parse(str(sub_file))
     for event in subtitle:
       events.append({
-          'timestamp': event.end - (event.end - event.start) / 2,
+          'timestamp': event.end.microsecond - (event.end.microsecond - event.start.microsecond) / 2,
           'text': event.text,
           'sub': sub_file,
           'vid': vid_sub_match
