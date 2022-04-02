@@ -30,15 +30,28 @@ import pymorphy2
 
 from pysubparser import parser as subParser
 
+import regex
+
 # Init language toolkits
 lemmatize = WordNetLemmatizer().lemmatize
 nltk.download('stopwords')
 nltk.download('wordnet')
 nltk.download('punkt')
+nltk.download('omw-1.4')
+
 morph = pymorphy2.MorphAnalyzer()
 
 
-def extract_frame(data):
+def convert_ms_to_ffmpeg_seek(ms):
+  ms = int(ms)
+  h = ms // 3600000
+  m = (ms % 3600000) // 60000
+  s = (ms % 60000) // 1000
+  ms = ms % 1000
+  return f'{h}:{m}:{s}.{ms}'
+
+
+def extract_frame(data) -> Path:
   """Extracts a frame from a video file
 
   Args:
@@ -66,24 +79,31 @@ def hline():
   print('\n' + '=' * termwidth + '\n')
 
 
-def analyze(data):
+def analyze(data) -> list:
   """Analyzes data and returns a list of lemmatized tokens
 
   Args:
-    data: A plain string of text to analyze
+    data (str): A string of text to analyze
 
   Returns:
-    result: A list of tokens
+    result (list): A list of tokens
   """
 
-  # Tokenize lowecase text and remove punctuation
-  words = word_tokenize(
-      re.sub(f'[{string.punctuation}]+', '', data.lower()))
+  # remove non latin characters
+  data = ''.join(re.findall(r'[\u0020-\u007F\u00A0-\u00FF\u0100-\u017F\u0180-\u024F]+', data))
+  # remove .ass styles
+  data = re.sub(r'\\[a-z]{1,3}\d{5,6}', '', data)
+  data = re.sub(r'\{.*\}', '', data)
+  # remove punctuation, lowecase and tokenize
+  data = data.translate(str.maketrans('', '', string.punctuation)).lower()
+  words = word_tokenize(data)
 
-  # Lemmatize words
+  # Lemmatize tokenized words
   result = []
   for word in words:
-    lang = chardet.detect(word.encode('cp1251'))['language']
+    # TODO: add proper multilang
+    # lang = chardet.detect(word.encode('cp1251'))['language']
+    lang = 'EN'
     if lang == 'Russian':
       if word not in stopwords.words('russian'):
         result.append(morph.normal_forms(word)[0])
@@ -200,10 +220,9 @@ def main():
   args = vars(parser.parse_args())
 
   if not Path.exists(args['path'][0]):
-    raise FileNotFoundError(
-        'Path {} does not exist'.format(args['path'][0]))
+    raise FileNotFoundError(f'Path {args["path"][0]} does not exist')
 
-  # Change working directory to script's path
+  # Change working directory to 'path'
   os.chdir(args['path'][0])
 
   # Init logging
@@ -224,10 +243,17 @@ def main():
 
   for event in parse_subs(args['path'][0], globs, conn):
     conn.execute('''INSERT INTO events (timestamp, text, sub_path, vid_path)
-                    VALUES (?, ?, ?, ?)''', (event['timestamp'].strftime('%H:%M:%S'),
+                    VALUES (?, ?, ?, ?)''',
+                 (
+                     convert_ms_to_ffmpeg_seek(event['timestamp']),
                                              ' '.join(analyze(event['text'])),
-                                             event['sub'],
-                                             event['vid']))
+                     event['sub'].as_posix(),
+                     event['vid'].as_posix()
+                 )
+                 )
+
+  conn.commit()
+  conn.close()
 
 
 if __name__ == "__main__":
