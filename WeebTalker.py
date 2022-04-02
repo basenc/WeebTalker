@@ -1,5 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""Look for subtitle line matching
+your search query and renders it to annoy your friends with
+tons of anime screenshots instead of talking
+like a human being
+
+Example:
+    ``python WeebTalker.py -p torrents/animes/SAO_S1_1080p[AniDub] -q 'baka'``
+
+Todo:
+    * Better search function
+"""
 
 import argparse
 from pathlib import Path
@@ -30,13 +41,13 @@ def extract_frame(data):
   """Extracts a frame from a video file
 
   Args:
-    data: A dict containing:
-      'vid': path of video file
-      'timestamp': timestamp of a frame to extract
-      'out': path of output file
+    data (dict): A dictionary containing:
+    {vid (pathlib.Path): path of video file
+    sub (pathlib.Path): path of subtitle file
+    timestamp (str): datetime of a subtitle event}
 
   Returns:
-    Path of the extracted frame
+    pathlib.Path: Path to the extracted frame
   """
 
   ffmpeg_cmd = f'ffmpeg -ss {data["timestamp"]} -i "{data["vid"]}" -copyts -vf ass="{data["sub"]}" -vframes 1 -y /tmp/frame.png'
@@ -100,18 +111,20 @@ def parse_subs(path, globs, conn):
   without file extensions is a subset of the subtitle file name.
 
   Args:
-    path: PosixPath, where to start looking for files
-    globs: A dictionary of globs to search for.
-      'video': is a list of valid video file globs
-      'subtitle': is a list of valid subtitle file globs
-    conn: A sqlite3 connection
+    path (pathlib.Path): where to start looking for files
+    globs (dict): A dictionary of globs to search for. Consists of:
+
+      * **video** (*pathlib.Path*): is a list of valid video file globs
+      * **subtitle** (*pathlib.Path*): is a list of valid subtitle file globs
+      * **conn** (*object*): A sqlite3 connection
 
   Returns:
-    A list of dicts, containing:
-    'timestamp': datetime of a subtitle event
-    'text': key with the event text
-    'sub': path of subtitle file
-    'vid': path of video file
+    dict: A dictionary of subtitle events, containing:
+
+      * **timestamp** (*int*): datetime of a subtitle event
+      * **text** (*str*): key with the event text
+      * **sub** (*pathlib.Path*): path of subtitle file
+      * **vid** (*pathlib.Path*): path of video file
 
   Raises:
     FileNotFoundError: If no video or subtitle files are found
@@ -159,9 +172,6 @@ def parse_subs(path, globs, conn):
 
 
 def main():
-  """Main function"""
-
-  # Add script arguments
   parser = argparse.ArgumentParser(description='''
     Look for subtitle line matching
     your search query and renders it to annoy your friends with
