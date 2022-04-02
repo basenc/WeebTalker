@@ -19,6 +19,7 @@ import re
 import os
 import sqlite3
 import subprocess
+import logging
 
 import chardet
 import nltk
@@ -143,10 +144,10 @@ def parse_subs(path, globs, conn):
   for ext in globs["video"]:
     vid_files.extend(path.glob(ext))
 
-  if not vid_files:
-    raise FileNotFoundError('No video files found')
-  if not sub_files:
-    raise FileNotFoundError('No subtitle files found')
+  if not vid_files or not sub_files:
+    logging.log(logging.CRITICAL, f'No video or subtitle files found in {path}')
+    raise FileNotFoundError(
+        f'No video or subtitle files are found in {path}')
 
   events = []
   vid_sub_match = ''
@@ -154,6 +155,7 @@ def parse_subs(path, globs, conn):
     for vid_file in vid_files:
       if sub_file.find(
               vid_file.name.split('.')[0]) != -1:
+        logging.log(logging.INFO, f'Found subtitle {sub_file} for video {vid_file}')
         vid_sub_match = vid_file
         break
     if not vid_sub_match:
@@ -189,9 +191,15 @@ def main():
                       default='',
                       help='Search query')
 
+  parser.add_argument('-d', '--debug',
+                      action='store_true',
+                      help='Enable debug logging')
+
+  if parser.parse_args().debug:
+    logging.basicConfig(level=logging.DEBUG)
+
   args = vars(parser.parse_args())
 
-  # Check if path exists
   if not Path.exists(args['path'][0]):
     raise FileNotFoundError(
         'Path {} does not exist'.format(args['path'][0]))
@@ -199,7 +207,9 @@ def main():
   # Change working directory to script's path
   os.chdir(args['path'][0])
 
-  # Create database for storing subtitle events
+  # Init logging
+  logging.basicConfig(filename='WeebTalker.log', level=logging.INFO)
+
   conn = sqlite3.connect('database.db')
   conn.execute('''CREATE TABLE IF NOT EXISTS events
                   (timestamp INT, text TEXT, sub_path TEXT, vid_path TEXT)''')
